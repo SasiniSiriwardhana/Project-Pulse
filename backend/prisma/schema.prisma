@@ -1,0 +1,173 @@
+// Prisma Schema for ProjectPulse
+// Datasource: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  PROJECT_MANAGER
+  TEAM_MEMBER
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum HealthStatus {
+  HEALTHY
+  AT_RISK
+  CRITICAL
+}
+
+enum ProjectRole {
+  LEAD
+  DEVELOPER
+  DESIGNER
+  QA
+  MEMBER
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  COMPLETED
+}
+
+enum RiskCategory {
+  TECHNICAL
+  SCHEDULE
+  RESOURCE
+  EXTERNAL
+}
+
+enum RiskSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RiskStatus {
+  IDENTIFIED
+  MITIGATING
+  CLOSED
+}
+
+model User {
+  id              String          @id @default(cuid())
+  email           String          @unique
+  password        String
+  name            String
+  role            Role            @default(TEAM_MEMBER)
+  avatar          String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  managedProjects Project[]       @relation("ProjectOwner")
+  memberships     ProjectMember[]
+  assignedTasks   Task[]          @relation("TaskAssignee")
+  reportedRisks   Risk[]          @relation("RiskReporter")
+
+  @@map("users")
+}
+
+model Project {
+  id          String         @id @default(cuid())
+  title       String
+  description String?
+  department  String?
+  status      ProjectStatus  @default(PLANNING)
+  priority    Priority       @default(MEDIUM)
+  health      HealthStatus   @default(HEALTHY)
+  progress    Float          @default(0.0)
+  startDate   DateTime
+  endDate     DateTime
+  ownerId     String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  owner       User           @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members     ProjectMember[]
+  tasks       Task[]
+  risks       Risk[]
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String      @id @default(cuid())
+  projectId String
+  userId    String
+  role      ProjectRole @default(MEMBER)
+  joinedAt  DateTime    @default(now())
+
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@map("project_members")
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  status      TaskStatus @default(TODO)
+  priority    Priority   @default(MEDIUM)
+  dueDate     DateTime
+  projectId   String
+  assigneeId  String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee    User?      @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, status])
+  @@index([assigneeId])
+  @@index([dueDate])
+  @@map("tasks")
+}
+
+model Risk {
+  id             String       @id @default(cuid())
+  title          String
+  description    String?
+  category       RiskCategory @default(TECHNICAL)
+  probability    Int          // 1 to 5
+  impact         Int          // 1 to 5
+  riskScore      Int          // probability * impact (1 to 25)
+  severity       RiskSeverity
+  mitigationPlan String?
+  status         RiskStatus   @default(IDENTIFIED)
+  projectId      String
+  reporterId     String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reporter       User         @relation("RiskReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+
+  @@index([projectId, severity])
+  @@index([riskScore])
+  @@map("risks")
+}
